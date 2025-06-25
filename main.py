@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, make_response
 from datetime import datetime
 import qrcode
 import io
@@ -10,35 +10,34 @@ from pytz import timezone
 
 app = Flask(__name__)
 TICKETS = []
-REGISTROS_POR_IP = {}
 
 @app.route('/')
 def generar_ticket():
-    ip = request.remote_addr
-    hoy = datetime.now(timezone("Chile/Continental")).strftime("%Y-%m-%d")
+    tz = timezone("Chile/Continental")
+    ahora = datetime.now(tz)
+    hoy = ahora.strftime("%Y-%m-%d")
+    ahora_str = ahora.strftime("%Y-%m-%d %H:%M:%S")
 
-    if ip in REGISTROS_POR_IP and REGISTROS_POR_IP[ip] == hoy:
+    ultimo_ticket = request.cookies.get("ultimo_ticket")
+    if ultimo_ticket == hoy:
         return """
         <html><head><title>Ya tienes un ticket</title></head>
         <body style="font-family: sans-serif; text-align: center; background: black; color: white; padding: 50px;">
         <h2>⚠️ Ya generaste un ticket hoy.</h2>
         <p>Vuelve mañana para obtener uno nuevo.</p>
-        <a href='/qr' style="color: #00ffcc;">Volver al QR</a>
         </body></html>
         """
 
-    now = datetime.now(timezone("Chile/Continental")).strftime("%Y-%m-%d %H:%M:%S")
     ticket_id = len(TICKETS) + 1
-    TICKETS.append({'id': ticket_id, 'fecha': now})
-    REGISTROS_POR_IP[ip] = hoy
+    TICKETS.append({'id': ticket_id, 'fecha': ahora_str})
 
     archivo_csv = "tickets.csv"
     nuevo_archivo = not os.path.exists(archivo_csv)
     with open(archivo_csv, mode="a", newline="") as archivo:
         writer = csv.writer(archivo)
         if nuevo_archivo:
-            writer.writerow(["ID", "Fecha y hora", "IP"])
-        writer.writerow([ticket_id, now, ip])
+            writer.writerow(["ID", "Fecha y hora"])
+        writer.writerow([ticket_id, ahora_str])
 
     html = f"""
     <!DOCTYPE html>
@@ -96,13 +95,16 @@ def generar_ticket():
         <div class="ticket">
             <h1>🎟️ TICKET #{ticket_id}</h1>
             <div class="info">
-                <p><strong>Fecha y hora:</strong><br>{now}</p>
+                <p><strong>Fecha y hora:</strong><br>{ahora_str}</p>
             </div>
         </div>
     </body>
     </html>
     """
-    return html
+
+    respuesta = make_response(html)
+    respuesta.set_cookie("ultimo_ticket", hoy, max_age=86400)  # 24 horas
+    return respuesta
 
 @app.route('/qr')
 def mostrar_qr():
