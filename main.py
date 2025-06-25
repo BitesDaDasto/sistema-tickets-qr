@@ -90,14 +90,6 @@ def generar_ticket():
                 font-size: 16px;
                 line-height: 1.4;
             }}
-            .volver {{
-                display: block;
-                margin-top: 25px;
-                text-align: center;
-                color: #00ffcc;
-                text-decoration: none;
-                font-weight: bold;
-            }}
         </style>
     </head>
     <body>
@@ -105,7 +97,6 @@ def generar_ticket():
             <h1>🎟️ TICKET #{ticket_id}</h1>
             <div class="info">
                 <p><strong>Fecha y hora:</strong><br>{now}</p>
-                <a class="volver" href="/qr">Volver al QR</a>
             </div>
         </div>
     </body>
