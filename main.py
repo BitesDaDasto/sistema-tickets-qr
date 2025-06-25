@@ -5,7 +5,6 @@ import io
 import base64
 import csv
 import os
-from collections import Counter
 import json
 from pytz import timezone
 
@@ -170,6 +169,96 @@ def mostrar_qr():
     </html>
     """
     return html
+
+@app.route('/stats')
+def estadisticas():
+    datos = {}
+    archivo_csv = "tickets.csv"
+    
+    if not os.path.exists(archivo_csv):
+        return "<h2 style='color:white; background:black; padding:20px;'>No hay datos aún.</h2>"
+
+    with open(archivo_csv, mode="r") as archivo:
+        reader = csv.DictReader(archivo)
+        for fila in reader:
+            fecha = fila["Fecha y hora"].split()[0]
+            datos[fecha] = datos.get(fecha, 0) + 1
+
+    fechas = list(datos.keys())
+    conteos = list(datos.values())
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Estadísticas de Tickets</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            body {{
+                background: #000;
+                color: white;
+                font-family: 'Segoe UI', sans-serif;
+                text-align: center;
+                padding: 20px;
+            }}
+            canvas {{
+                background: #111;
+                border: 1px solid #444;
+                border-radius: 12px;
+                padding: 10px;
+                max-width: 100%;
+            }}
+        </style>
+    </head>
+    <body>
+        <h2>📊 Tickets por Día</h2>
+        <canvas id="grafico" width="400" height="300"></canvas>
+        <script>
+            const ctx = document.getElementById('grafico').getContext('2d');
+            new Chart(ctx, {{
+                type: 'bar',
+                data: {{
+                    labels: {json.dumps(fechas)},
+                    datasets: [{{
+                        label: 'Tickets generados',
+                        data: {json.dumps(conteos)},
+                        backgroundColor: '#00ffcc'
+                    }}]
+                }},
+                options: {{
+                    scales: {{
+                        y: {{
+                            beginAtZero: true,
+                            ticks: {{
+                                color: 'white'
+                            }},
+                            grid: {{
+                                color: '#333'
+                            }}
+                        }},
+                        x: {{
+                            ticks: {{
+                                color: 'white'
+                            }},
+                            grid: {{
+                                color: '#333'
+                            }}
+                        }}
+                    }},
+                    plugins: {{
+                        legend: {{
+                            labels: {{
+                                color: 'white'
+                            }}
+                        }}
+                    }}
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
