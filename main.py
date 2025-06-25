@@ -5,6 +5,7 @@ import io
 import base64
 import csv
 import os
+from collections import Counter
 
 app = Flask(__name__)
 TICKETS = []
@@ -61,6 +62,29 @@ def mostrar_qr():
     </html>
     """
     return html
+
+@app.route('/stats')
+def ver_estadisticas():
+    fechas = []
+
+    try:
+        with open("tickets.csv", mode="r") as archivo:
+            lector = csv.reader(archivo)
+            next(lector)  # Saltar encabezado
+            for fila in lector:
+                fecha_completa = fila[1]
+                fecha_sola = fecha_completa.split(" ")[0]
+                fechas.append(fecha_sola)
+
+        conteo = Counter(fechas)
+        html = "<h1>📊 Tickets generados por día</h1><ul>"
+        for fecha, cantidad in conteo.items():
+            html += f"<li>{fecha}: {cantidad} ticket(s)</li>"
+        html += "</ul>"
+        return html
+
+    except FileNotFoundError:
+        return "<p>No hay tickets aún.</p>"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
