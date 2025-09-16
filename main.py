@@ -39,7 +39,6 @@ def index():
         return "<h2 style='color:red'>⚠️ Ya generaste un ticket hoy. Intenta mañana.</h2>"
 
     ticket_id = str(uuid4())
-
     tz = pytz.timezone("America/Santiago")
     fecha = datetime.now(tz)
     fecha_str = fecha.strftime("%Y-%m-%d")
@@ -126,6 +125,9 @@ def stats():
     rows = cursor.fetchall()
     conn.close()
 
+    if not rows:
+        return "<h2 style='color:white'>No hay tickets generados aún</h2>"
+
     counts_total = defaultdict(int)
     counts_redeemed = defaultdict(int)
     counts_not_redeemed = defaultdict(int)
@@ -139,9 +141,9 @@ def stats():
             counts_not_redeemed[key] += 1
 
     labels = sorted(counts_total.keys())
-    total_vals = [counts_total.get(label,0) for label in labels]
-    redeemed_vals = [counts_redeemed.get(label,0) for label in labels]
-    not_redeemed_vals = [counts_not_redeemed.get(label,0) for label in labels]
+    total_vals = [int(counts_total.get(label,0)) for label in labels]
+    redeemed_vals = [int(counts_redeemed.get(label,0)) for label in labels]
+    not_redeemed_vals = [int(counts_not_redeemed.get(label,0)) for label in labels]
 
     # Gráfico de barras apiladas
     plt.figure(figsize=(14,6))
@@ -212,3 +214,4 @@ def download_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
