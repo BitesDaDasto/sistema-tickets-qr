@@ -8,6 +8,7 @@ from uuid import uuid4
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from collections import defaultdict
 import openpyxl
 import base64  # <--- IMPORT BASE64
@@ -148,13 +149,15 @@ def stats():
     redeemed_vals = [int(counts_redeemed.get(label,0)) for label in labels]
     not_redeemed_vals = [int(counts_not_redeemed.get(label,0)) for label in labels]
 
-    # Gráfico de barras apiladas
+    # Gráfico de barras apiladas con eje Y en enteros
     plt.figure(figsize=(14,6))
     plt.bar(labels, not_redeemed_vals, label="No canjeados", color="orange")
     plt.bar(labels, redeemed_vals, bottom=not_redeemed_vals, label="Canjeados", color="green")
     plt.title("Tickets por fecha y hora (bloques horarios)")
     plt.xticks(rotation=90, fontsize=8)
     plt.ylabel("Cantidad de tickets")
+    ax = plt.gca()
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Solo números enteros
     plt.legend()
     plt.tight_layout()
 
