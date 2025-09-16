@@ -89,12 +89,6 @@ def generar_ticket():
                 font-size: 16px;
                 line-height: 1.4;
             }}
-            .extra {{
-                margin-top: 20px;
-                font-size: 14px;
-                text-align: center;
-                color: #ccc;
-            }}
         </style>
     </head>
     <body>
@@ -102,7 +96,6 @@ def generar_ticket():
             <h1>🎟️ TICKET #{ticket_id}</h1>
             <div class="info">
                 <p><strong>Fecha y hora:</strong><br>{ahora_str}</p>
-                <p class="extra">Pide cualquier wea pa comer y exige una cerveza gratis, tienes una hora pa cobrarlo</p>
             </div>
         </div>
     </body>
@@ -110,7 +103,7 @@ def generar_ticket():
     """
 
     respuesta = make_response(html)
-    respuesta.set_cookie("ultimo_ticket", hoy, max_age=86400)
+    respuesta.set_cookie("ultimo_ticket", hoy, max_age=86400)  # 24 horas
     return respuesta
 
 @app.route('/qr')
@@ -172,27 +165,20 @@ def mostrar_qr():
 
 @app.route('/stats')
 def estadisticas():
-    datos_dia = {}
-    datos_hora = {}
+    datos = {}
     archivo_csv = "tickets.csv"
-
+    
     if not os.path.exists(archivo_csv):
         return "<h2 style='color:white; background:black; padding:20px;'>No hay datos aún.</h2>"
 
     with open(archivo_csv, mode="r") as archivo:
         reader = csv.DictReader(archivo)
         for fila in reader:
-            partes = fila["Fecha y hora"].split()
-            if len(partes) == 2:
-                fecha, hora = partes
-                hora = hora[:2] + ":00"
-                datos_dia[fecha] = datos_dia.get(fecha, 0) + 1
-                datos_hora[hora] = datos_hora.get(hora, 0) + 1
+            fecha = fila["Fecha y hora"].split()[0]
+            datos[fecha] = datos.get(fecha, 0) + 1
 
-    fechas = list(datos_dia.keys())
-    conteos_dia = list(datos_dia.values())
-    horas = sorted(datos_hora.keys())
-    conteos_hora = [datos_hora[h] for h in horas]
+    fechas = list(datos.keys())
+    conteos = list(datos.values())
 
     return f"""
     <!DOCTYPE html>
@@ -215,51 +201,51 @@ def estadisticas():
                 border-radius: 12px;
                 padding: 10px;
                 max-width: 100%;
-                margin-bottom: 40px;
             }}
         </style>
     </head>
     <body>
         <h2>📊 Tickets por Día</h2>
-        <canvas id="graficoDia" width="400" height="300"></canvas>
-        <h2>🕐 Tickets por Hora</h2>
-        <canvas id="graficoHora" width="400" height="300"></canvas>
+        <canvas id="grafico" width="400" height="300"></canvas>
         <script>
-            new Chart(document.getElementById('graficoDia').getContext('2d'), {{
+            const ctx = document.getElementById('grafico').getContext('2d');
+            new Chart(ctx, {{
                 type: 'bar',
                 data: {{
                     labels: {json.dumps(fechas)},
                     datasets: [{{
-                        label: 'Tickets por día',
-                        data: {json.dumps(conteos_dia)},
+                        label: 'Tickets generados',
+                        data: {json.dumps(conteos)},
                         backgroundColor: '#00ffcc'
                     }}]
                 }},
                 options: {{
                     scales: {{
-                        y: {{ beginAtZero: true, ticks: {{ color: 'white' }}, grid: {{ color: '#333' }} }},
-                        x: {{ ticks: {{ color: 'white' }}, grid: {{ color: '#333' }} }}
+                        y: {{
+                            beginAtZero: true,
+                            ticks: {{
+                                color: 'white'
+                            }},
+                            grid: {{
+                                color: '#333'
+                            }}
+                        }},
+                        x: {{
+                            ticks: {{
+                                color: 'white'
+                            }},
+                            grid: {{
+                                color: '#333'
+                            }}
+                        }}
                     }},
-                    plugins: {{ legend: {{ labels: {{ color: 'white' }} }} }}
-                }}
-            }});
-
-            new Chart(document.getElementById('graficoHora').getContext('2d'), {{
-                type: 'bar',
-                data: {{
-                    labels: {json.dumps(horas)},
-                    datasets: [{{
-                        label: 'Tickets por hora',
-                        data: {json.dumps(conteos_hora)},
-                        backgroundColor: '#ffaa00'
-                    }}]
-                }},
-                options: {{
-                    scales: {{
-                        y: {{ beginAtZero: true, ticks: {{ color: 'white' }}, grid: {{ color: '#333' }} }},
-                        x: {{ ticks: {{ color: 'white' }}, grid: {{ color: '#333' }} }}
-                    }},
-                    plugins: {{ legend: {{ labels: {{ color: 'white' }} }} }}
+                    plugins: {{
+                        legend: {{
+                            labels: {{
+                                color: 'white'
+                            }}
+                        }}
+                    }}
                 }}
             }});
         </script>
@@ -270,4 +256,3 @@ def estadisticas():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
-
