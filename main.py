@@ -134,7 +134,9 @@ def stats():
     counts_not_redeemed = defaultdict(int)
 
     for date, hour, redeemed in rows:
-        key = f"{date} {hour}"
+        # Agrupar por bloque horario
+        hour_block = hour.split(":")[0] + ":00"
+        key = f"{date} {hour_block}"
         counts_total[key] += 1
         if redeemed:
             counts_redeemed[key] += 1
@@ -150,7 +152,7 @@ def stats():
     plt.figure(figsize=(14,6))
     plt.bar(labels, not_redeemed_vals, label="No canjeados", color="orange")
     plt.bar(labels, redeemed_vals, bottom=not_redeemed_vals, label="Canjeados", color="green")
-    plt.title("Tickets por fecha y hora (Canjeados / No Canjeados)")
+    plt.title("Tickets por fecha y hora (bloques horarios)")
     plt.xticks(rotation=90, fontsize=8)
     plt.ylabel("Cantidad de tickets")
     plt.legend()
@@ -214,5 +216,3 @@ def download_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-
