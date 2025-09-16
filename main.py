@@ -1,258 +1,219 @@
-from flask import Flask, request, make_response
-from datetime import datetime
+from flask import Flask, render_template_string, request, make_response, send_file
+import sqlite3
 import qrcode
 import io
 import base64
-import csv
-import os
-import json
-from pytz import timezone
+from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from collections import defaultdict
+import openpyxl
 
 app = Flask(__name__)
-TICKETS = []
 
-@app.route('/')
-def generar_ticket():
-    tz = timezone("Chile/Continental")
-    ahora = datetime.now(tz)
-    hoy = ahora.strftime("%Y-%m-%d")
-    ahora_str = ahora.strftime("%Y-%m-%d %H:%M:%S")
+# Crear tabla si no existe
+def init_db():
+    conn = sqlite3.connect("tickets.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS tickets
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ip TEXT,
+                  user_agent TEXT,
+                  date TEXT,
+                  hour TEXT)''')
+    conn.commit()
+    conn.close()
 
-    ultimo_ticket = request.cookies.get("ultimo_ticket")
-    if ultimo_ticket == hoy:
-        return """
-        <html><head><title>Ya tienes un ticket</title></head>
-        <body style="font-family: sans-serif; text-align: center; background: black; color: white; padding: 50px;">
-        <h2>⚠️ Ya generaste un ticket hoy.</h2>
-        <p>Vuelve mañana para obtener uno nuevo.</p>
-        </body></html>
-        """
+init_db()
 
-    ticket_id = len(TICKETS) + 1
-    TICKETS.append({'id': ticket_id, 'fecha': ahora_str})
+# Página principal: generar ticket
+@app.route("/")
+def index():
+    user_ip = request.remote_addr
+    user_agent = request.headers.get("User-Agent")
 
-    archivo_csv = "tickets.csv"
-    nuevo_archivo = not os.path.exists(archivo_csv)
-    with open(archivo_csv, mode="a", newline="") as archivo:
-        writer = csv.writer(archivo)
-        if nuevo_archivo:
-            writer.writerow(["ID", "Fecha y hora"])
-        writer.writerow([ticket_id, ahora_str])
+    # Revisar cookie
+    if request.cookies.get("ticket_claimed") == "yes":
+        return "<h3>Ya generaste un ticket hoy. Vuelve mañana 🍻</h3>"
 
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    hour_str = now.strftime("%H:00")
+
+    # Guardar ticket en DB
+    conn = sqlite3.connect("tickets.db")
+    c = conn.cursor()
+    c.execute("INSERT INTO tickets (ip, user_agent, date, hour) VALUES (?, ?, ?, ?)",
+              (user_ip, user_agent, date_str, hour_str))
+    conn.commit()
+    conn.close()
+
+    # Generar QR
+    qr_data = f"Ticket válido - {date_str} {hour_str}"
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    # HTML estilizado
     html = f"""
-    <!DOCTYPE html>
     <html>
     <head>
-        <title>Ticket #{ticket_id}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&display=swap');
             body {{
-                margin: 0;
-                font-family: 'Roboto Mono', monospace;
-                background: #000;
-                color: white;
+                background-color: #000;
+                color: #fff;
+                font-family: 'Arial', sans-serif;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 height: 100vh;
+                margin: 0;
             }}
             .ticket {{
                 background: #111;
-                border: 4px solid white;
-                border-radius: 16px;
-                padding: 30px 20px;
-                width: 90%;
-                max-width: 360px;
-                box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
-                position: relative;
-                overflow: hidden;
+                border: 2px solid #fff;
+                border-radius: 15px;
+                padding: 20px;
+                text-align: center;
+                width: 320px;
+                box-shadow: 0px 0px 15px rgba(255,255,255,0.3);
             }}
-            .ticket::before,
-            .ticket::after {{
-                content: "";
-                position: absolute;
-                width: 100%;
-                height: 8px;
-                background-image: repeating-linear-gradient(90deg, white 0, white 10px, transparent 10px, transparent 20px);
-            }}
-            .ticket::before {{ top: 0; }}
-            .ticket::after {{ bottom: 0; }}
             h1 {{
-                font-size: 28px;
-                margin-bottom: 20px;
-                text-align: center;
-                color: #00ffcc;
+                font-size: 20px;
+                margin-bottom: 15px;
             }}
-            .info {{
-                text-align: center;
-                font-size: 16px;
-                line-height: 1.4;
+            img {{
+                margin: 15px 0;
+                width: 200px;
+                height: 200px;
+            }}
+            p {{
+                font-size: 14px;
+                margin-top: 10px;
             }}
         </style>
     </head>
     <body>
         <div class="ticket">
-            <h1>🎟️ TICKET #{ticket_id}</h1>
-            <div class="info">
-                <p><strong>Fecha y hora:</strong><br>{ahora_str}</p>
-            </div>
+            <h1>🎟 Tu Ticket</h1>
+            <img src="data:image/png;base64,{qr_b64}" />
+            <p><b>Fecha:</b> {date_str}</p>
+            <p><b>Hora:</b> {hour_str}</p>
+            <p>Pide cualquier wea pa comer y exige una <b>cerveza gratis</b>, tienes <b>1 hora</b> pa cobrarlo 🍺</p>
         </div>
     </body>
     </html>
     """
+    resp = make_response(render_template_string(html))
+    resp.set_cookie("ticket_claimed", "yes", max_age=24*60*60)  # 24 horas
+    return resp
 
-    respuesta = make_response(html)
-    respuesta.set_cookie("ultimo_ticket", hoy, max_age=86400)  # 24 horas
-    return respuesta
+# Estadísticas con gráfico
+@app.route("/stats")
+def stats():
+    conn = sqlite3.connect("tickets.db")
+    c = conn.cursor()
+    c.execute("SELECT date, hour FROM tickets ORDER BY date, hour")
+    rows = c.fetchall()
+    conn.close()
 
-@app.route('/qr')
-def mostrar_qr():
-    url = request.host_url
-    qr = qrcode.make(url)
-    buffer = io.BytesIO()
-    qr.save(buffer, format="PNG")
-    img_str = base64.b64encode(buffer.getvalue()).decode()
+    # Contar tickets por combinación fecha+hora
+    counts = defaultdict(int)
+    for date, hour in rows:
+        key = f"{date} {hour}"
+        counts[key] += 1
+
+    labels = list(counts.keys())
+    values = list(counts.values())
+
+    # Gráfico único
+    plt.figure(figsize=(14, 6))
+    plt.bar(labels, values)
+    plt.title("Tickets generados por fecha y hora")
+    plt.xticks(rotation=90, fontsize=8)
+    plt.ylabel("Cantidad de tickets")
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    graph_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    plt.close()
 
     html = f"""
-    <!DOCTYPE html>
     <html>
     <head>
-        <title>Código QR</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body {{
-                font-family: 'Segoe UI', sans-serif;
                 background: #000;
-                color: white;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }}
-            h2 {{
-                margin-bottom: 20px;
-                color: #00ffcc;
+                color: #fff;
                 text-align: center;
+                font-family: Arial, sans-serif;
+            }}
+            h1 {{
+                margin: 20px;
             }}
             img {{
-                border: 6px dashed #00ffcc;
-                padding: 12px;
-                background: #111;
-                border-radius: 12px;
-            }}
-            p {{
-                margin-top: 20px;
-                font-size: 14px;
-                color: #ccc;
+                max-width: 100%;
+                border: 2px solid #fff;
+                border-radius: 10px;
             }}
             a {{
-                color: #00ffcc;
+                display: inline-block;
+                margin-top: 20px;
+                padding: 10px 20px;
+                background: #fff;
+                color: #000;
                 text-decoration: none;
+                border-radius: 5px;
+                font-weight: bold;
             }}
         </style>
     </head>
     <body>
-        <h2>Escanea este código QR</h2>
-        <img src="data:image/png;base64,{img_str}" alt="Código QR">
-        <p>Este QR apunta a: <a href="{url}">{url}</a></p>
+        <h1>📊 Estadísticas de Tickets</h1>
+        <img src="data:image/png;base64,{graph_b64}">
+        <br>
+        <a href="/download_excel">⬇ Descargar historial en Excel</a>
     </body>
     </html>
     """
-    return html
+    return render_template_string(html)
 
-@app.route('/stats')
-def estadisticas():
-    datos = {}
-    archivo_csv = "tickets.csv"
-    
-    if not os.path.exists(archivo_csv):
-        return "<h2 style='color:white; background:black; padding:20px;'>No hay datos aún.</h2>"
+# Descargar historial en Excel
+@app.route("/download_excel")
+def download_excel():
+    conn = sqlite3.connect("tickets.db")
+    c = conn.cursor()
+    c.execute("SELECT id, ip, user_agent, date, hour FROM tickets ORDER BY date, hour")
+    rows = c.fetchall()
+    conn.close()
 
-    with open(archivo_csv, mode="r") as archivo:
-        reader = csv.DictReader(archivo)
-        for fila in reader:
-            fecha = fila["Fecha y hora"].split()[0]
-            datos[fecha] = datos.get(fecha, 0) + 1
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Tickets"
 
-    fechas = list(datos.keys())
-    conteos = list(datos.values())
+    # Encabezados
+    headers = ["ID", "IP", "User Agent", "Fecha", "Hora"]
+    ws.append(headers)
 
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Estadísticas de Tickets</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <style>
-            body {{
-                background: #000;
-                color: white;
-                font-family: 'Segoe UI', sans-serif;
-                text-align: center;
-                padding: 20px;
-            }}
-            canvas {{
-                background: #111;
-                border: 1px solid #444;
-                border-radius: 12px;
-                padding: 10px;
-                max-width: 100%;
-            }}
-        </style>
-    </head>
-    <body>
-        <h2>📊 Tickets por Día</h2>
-        <canvas id="grafico" width="400" height="300"></canvas>
-        <script>
-            const ctx = document.getElementById('grafico').getContext('2d');
-            new Chart(ctx, {{
-                type: 'bar',
-                data: {{
-                    labels: {json.dumps(fechas)},
-                    datasets: [{{
-                        label: 'Tickets generados',
-                        data: {json.dumps(conteos)},
-                        backgroundColor: '#00ffcc'
-                    }}]
-                }},
-                options: {{
-                    scales: {{
-                        y: {{
-                            beginAtZero: true,
-                            ticks: {{
-                                color: 'white'
-                            }},
-                            grid: {{
-                                color: '#333'
-                            }}
-                        }},
-                        x: {{
-                            ticks: {{
-                                color: 'white'
-                            }},
-                            grid: {{
-                                color: '#333'
-                            }}
-                        }}
-                    }},
-                    plugins: {{
-                        legend: {{
-                            labels: {{
-                                color: 'white'
-                            }}
-                        }}
-                    }}
-                }}
-            }});
-        </script>
-    </body>
-    </html>
-    """
+    # Datos ordenados
+    for row in rows:
+        ws.append(row)
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    # Guardar en memoria
+    file_stream = io.BytesIO()
+    wb.save(file_stream)
+    file_stream.seek(0)
+
+    return send_file(
+        file_stream,
+        as_attachment=True,
+        download_name="tickets.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
