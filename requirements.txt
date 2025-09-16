@@ -3,3 +3,4 @@ qrcode
 pillow
 matplotlib
 openpyxl
+pytz
