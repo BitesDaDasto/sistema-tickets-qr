@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from collections import defaultdict
 import openpyxl
+import base64  # <--- IMPORT BASE64
 
 app = Flask(__name__)
 
@@ -200,7 +201,6 @@ def download_excel():
     for row in rows:
         ws.append(row)
 
-    # Guardar en memoria
     file_stream = io.BytesIO()
     wb.save(file_stream)
     file_stream.seek(0)
@@ -214,4 +214,5 @@ def download_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
